@@ -76,18 +76,18 @@ func CPs(ds *[]Data) string { b, _ := json.Marshal(ds); return string(b) }
 
 ### 1. Benchmark 代码
 
-详见 [main_test.go](main_test.go)，三种基础遍历与三种链式调用均有对应 benchmark：
+详见 [main_test.go](main_test.go)，三种基础遍历与三种链式调用均有对应 benchmark，且分别覆盖小结构体（Data）和大结构体（BigData）：
 
-- `BenchmarkValueSlice`：[]Type 遍历
-- `BenchmarkPointerSlice`：[]\*Type 遍历
-- `BenchmarkPtrToSlice`：\*[]Type 遍历
-- `BenchmarkChainValueSlice`：[]Type 链式调用
-- `BenchmarkChainPointerSlice`：[]\*Type 链式调用
-- `BenchmarkChainPtrToSlice`：\*[]Type 链式调用
+- `BenchmarkValueSlice`/`BenchmarkBigValueSlice`：[]Type 遍历
+- `BenchmarkPointerSlice`/`BenchmarkBigPointerSlice`：[]\*Type 遍历
+- `BenchmarkPtrToSlice`/`BenchmarkBigPtrToSlice`：\*[]Type 遍历
+- `BenchmarkChainValueSlice`/`BenchmarkChainBigValueSlice`：[]Type 链式调用
+- `BenchmarkChainPointerSlice`/`BenchmarkChainBigPointerSlice`：[]\*Type 链式调用
+- `BenchmarkChainPtrToSlice`/`BenchmarkChainBigPtrToSlice`：\*[]Type 链式调用
 
-### 2. 运行结果（Apple M2, 1e6 元素，2025-05-28）
+### 2. 运行结果（Apple M2, 2025-05-28）
 
-#### 基础遍历：
+#### 小结构体遍历：
 
 ```
 BenchmarkValueSlice-8           4094    301527 ns/op      0 B/op         0 allocs/op
@@ -95,7 +95,7 @@ BenchmarkPointerSlice-8         1939    612211 ns/op      0 B/op         0 alloc
 BenchmarkPtrToSlice-8           3618    348847 ns/op      0 B/op         0 allocs/op
 ```
 
-#### 链式调用：
+#### 小结构体链式调用：
 
 ```
 BenchmarkChainValueSlice-8         6   176909785 ns/op   271799080 B/op      13 allocs/op
@@ -103,22 +103,36 @@ BenchmarkChainPointerSlice-8       6   187386639 ns/op   503484700 B/op  1000047
 BenchmarkChainPtrToSlice-8         7   162671185 ns/op   380446460 B/op      28 allocs/op
 ```
 
-### 3. 性能原理剖析
+#### 大结构体遍历：
 
-- `[]Type`（值切片）
-  - 数据连续，遍历时内存访问线性，CPU cache 命中率高，指令流水线友好。
-  - 访问元素无需解引用，CPU 指令少。
-  - 适合小型结构体和高频遍历场景。
-- `[]*Type`（指针切片）
-  - 切片存放指针，实际数据分布在堆上，内存不连续。
-  - 遍历时需多一次指针解引用，cache miss 增多，CPU 指令数增加。
-  - 分配次数多，GC 追踪压力大，序列化时性能下降。
-  - 适合大型结构体或需共享/频繁修改的场景。
-- `*[]Type`（切片指针）
-  - 仅多一层指针，遍历和内存布局与 `[]Type` 一致。
-  - 适合需要修改切片本身的场景。
+```
+BenchmarkBigValueSlice-8         35137     33003 ns/op      0 B/op         0 allocs/op
+BenchmarkBigPointerSlice-8        4675    291991 ns/op      0 B/op         0 allocs/op
+BenchmarkBigPtrToSlice-8         39066     31747 ns/op      0 B/op         0 allocs/op
+```
 
-> 综上，`[]Type`/`*[]Type` 性能接近且优于 `[]*Type`，后者在遍历、序列化、GC 等场景下均有明显劣势。
+#### 大结构体链式调用：
+
+```
+BenchmarkChainBigValueSlice-8         5   222286700 ns/op   235427011 B/op      35 allocs/op
+BenchmarkChainBigPointerSlice-8       5   219274592 ns/op   263071192 B/op  100044 allocs/op
+BenchmarkChainBigPtrToSlice-8         5   221266492 ns/op   289114571 B/op      50 allocs/op
+```
+
+### 3. 性能原理剖析与结论
+
+- **小结构体场景**：
+  - `[]Type`/`*[]Type` 遍历和链式调用均明显优于 `[]*Type`，cache 友好，CPU 指令少。
+  - `[]*Type` 分配次数多，GC 压力大，序列化和遍历性能劣势明显。
+- **大结构体场景**：
+  - `[]*Type` 在链式调用时内存分配和 GC 压力优势明显（分配次数远低于小结构体），但遍历性能仍不如 `[]Type`/`*[]Type`。
+  - `[]Type`/`*[]Type` 适合高频遍历、只读场景，`[]*Type` 适合需频繁修改/共享大对象。
+- **函数调用链建议**：
+  - 只读/遍历多/结构体小：优先 `[]Type` 或 `*[]Type`。
+  - 结构体大且需共享/频繁修改：可用 `[]*Type`，但需权衡遍历和 GC 性能。
+  - 需修改切片本身（如扩容、重置）：用 `*[]Type`。
+
+> 所有链路、benchmark、资源消耗对比均已覆盖三种写法和大小结构体，main_test.go 可直接运行。
 
 ---
 
@@ -141,6 +155,23 @@ BenchmarkChainPtrToSlice-8         7   162671185 ns/op   380446460 B/op      28 
 - 小于等于 64 字节为“小型结构体”，推荐 `[]Type` 或 `*[]Type`。
 - 大于 64 字节为“大型结构体”，推荐 `[]*Type`。
 - 以 cache line（64 字节）为参考，实际可结合 profile 调整。
+
+### 如何快速判断结构体大小
+
+1. **字段类型估算**：
+   - 常见类型字节数：int64/uint64/float64 为 8 字节，int32/float32 为 4 字节，指针为 8 字节（64 位系统）。
+   - 结构体总大小 ≈ 各字段类型字节数之和（注意内存对齐可能略大）。
+2. **代码辅助法**：
+   - 可用 `unsafe.Sizeof` 快速获取结构体实际大小：
+     ```go
+     fmt.Println(unsafe.Sizeof(YourStruct{}))
+     ```
+   - 也可借助 IDE 悬浮提示、GoLand/VSCode 插件等。
+3. **经验法则**：
+   - 结构体字段总数较多、包含数组/嵌套 struct/大字符串/切片等，通常为“大型结构体”。
+   - 仅有少量基础类型字段，通常为“小型结构体”。
+
+> 建议开发者在设计数据结构时，关注结构体大小，必要时用 `unsafe.Sizeof` 明确验证。
 
 ---
 
