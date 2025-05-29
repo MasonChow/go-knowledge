@@ -1,0 +1,7 @@
+goos: darwin
+goarch: arm64
+cpu: Apple M2
+BenchmarkContinuous-8     	     312	   3920447 ns/op	         2.000 numGC	         0.03762 pauseMs	320004153 B/op	       1 allocs/op
+BenchmarkHeapPointers-8   	       7	 146090595 ns/op	         4.000 numGC	         0.1399 pauseMs	400003126 B/op	10000001 allocs/op
+PASS
+ok  	command-line-arguments	3.433s
