@@ -51,7 +51,7 @@
 ## 三、原理剖析
 
 - 切片扩容：容量不足时会重新分配更大内存并拷贝数据，频繁 append 会导致多次分配和拷贝。
-  - 以默认容量（`make([]T, 0)`）为例，假设最终需要 10000 个元素，Go 的切片扩容策略可参考源码 [`runtime/slice.go:growslice`](https://cs.opensource.google/go/go/+/refs/tags/go1.22.0:src/runtime/slice.go;l=227) ：
+  - 以默认容量（`make([]T, 0)`）为例，假设最终需要 10000 个元素，Go 的切片扩容策略可参考源码 [`runtime/slice.go:growslice`](https://cs.opensource.google/go/go/+/refs/tags/go1.22.0:src/runtime/slice.go;l=227)
     - **扩容策略随切片长度不同而变化**：
       - 当原容量小于 1024 时，每次扩容为原容量的 2 倍（即翻倍）。
       - 当原容量大于等于 1024 时，每次扩容为原容量的 1.25 倍（即增加 25%）。
