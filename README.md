@@ -6,4 +6,5 @@
 
 ## 知识点索引
 
-- [*[]Type、[]Type、[]*Type 的区别](docs/slice-pointer-diff/)：Go 切片与指针组合类型的本质区别与用法
+- [Go 切片与指针组合类型的本质区别与用法](docs/slice-pointer-diff/)
+- [Go 切片 make 预设容量的性能剖析与业务实践](docs/make-slice-capacity-benchmark/)
